@@ -891,22 +891,25 @@ def build_answer(message: str, history: list | None = None) -> dict:
             "live": False,
         }
 
+    # Questions the knowledge base already answers are served immediately.
+    # Searching first cost the full SEARCH_DEADLINE whenever the search
+    # providers were slow or unreachable from this host, so a question we
+    # could answer in 400ms took five seconds and the child waited for
+    # nothing. Only spend that budget when we do not already know.
+    kb_relevant = bool(kb) and _text_relevant(msg, kb["answer"]) >= 0.34
+    if kb_relevant:
+        return {"reply": kb["answer"], "source": kb["source"], "sources": [], "live": False}
+
     live_text, live_sources = _search_web(msg)
 
     # Prefer live internet results when they add real substance, otherwise KB.
     if live_text and len(live_text) > 80:
-        # Only lead with the knowledge base when it genuinely talks about what
-        # was asked. The science entry lists "photosynthesis" as a topic but
-        # its answer is about forces — prepending that to a real definition
-        # would be a confidently-wrong non-sequitur, which is worse than none.
-        kb_relevant = bool(kb) and _text_relevant(msg, kb["answer"]) >= 0.34
-        if kb_relevant:
-            reply = f"{_trim(kb['answer'], 420)}\n\nWhat the web says: {_trim(live_text, 380)}"
-            source = "codeyoung+web"
-        else:
-            reply = f"Here's what I found live: {_trim(live_text, 700)}"
-            source = "web"
-        return {"reply": reply, "source": source, "sources": live_sources, "live": True}
+        return {
+            "reply": f"Here's what I found live: {_trim(live_text, 700)}",
+            "source": "web",
+            "sources": live_sources,
+            "live": True,
+        }
 
     if kb:
         return {"reply": kb["answer"], "source": kb["source"], "sources": live_sources, "live": False}
