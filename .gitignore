@@ -1,0 +1,66 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# Local agent / editor state
+.commandcode/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Flutter/Dart/Pub related (any depth)
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+coverage/
+.widget_preview/
+
+# Symbolication / obfuscation
+app.*.symbols
+app.*.map.json
+
+# Android Studio build artifacts (any depth)
+**/android/.gradle/
+**/android/app/debug
+**/android/app/profile
+**/android/app/release
+# Local SDK path — machine specific, Render/CI sets its own
+**/android/local.properties
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# SQLite database + WAL journal: regenerated automatically by the seed on boot
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
+
+# Secrets — never commit credentials or tokens
+.env
+.env.*
+!.env.example
+*.pem
+*.key

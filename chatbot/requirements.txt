@@ -1,0 +1,6 @@
+flask>=3.0
+requests>=2.31
+gTTS>=2.5
+# 7.3.1+ ships a TrustedClientToken Microsoft still accepts; 7.2.8 gets a 403
+# and silently falls back to the much slower gTTS.
+edge-tts>=7.3.1
