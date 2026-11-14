@@ -28,7 +28,10 @@ dependencies:
   # Video Player
   video_player: ^2.8.6
   chewie: ^1.7.5
-  youtube_player_flutter: ^9.1.0
+  # 10.x dropped flutter_inappwebview (whose Android impl still calls
+  # getDefaultProguardFile('proguard-android.txt'), removed in AGP 9) in favour
+  # of the official YouTube IFrame API over webview_flutter.
+  youtube_player_flutter: ^10.0.1
   
   # Image Handling
   cached_network_image: ^3.3.1

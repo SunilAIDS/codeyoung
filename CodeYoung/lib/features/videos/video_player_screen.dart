@@ -53,10 +53,10 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
       final video = await ref.read(videoDetailProvider(widget.videoId).future);
 
       if (video.videoType == 'youtube' && (video.videoId?.isNotEmpty ?? false)) {
-        _yt = YoutubePlayerController(
-          initialVideoId: video.videoId!,
-          flags: const YoutubePlayerFlags(
-            autoPlay: true,
+        _yt = YoutubePlayerController.fromVideoId(
+          videoId: video.videoId!,
+          autoPlay: true,
+          params: const YoutubePlayerParams(
             mute: false,
             enableCaption: true,
           ),
@@ -86,7 +86,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   void dispose() {
     _mp4?.dispose();
     _chewie?.dispose();
-    _yt?.dispose();
+    _yt?.close();
     super.dispose();
   }
 
@@ -292,13 +292,9 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
       child: Stack(
         children: [
           if (_yt != null)
-            YoutubePlayerBuilder(
-              player: YoutubePlayer(
-                controller: _yt!,
-                showVideoProgressIndicator: true,
-                progressIndicatorColor: AppColors.primaryBlue,
-              ),
-              builder: (context, player) => SizedBox(width: double.infinity, child: player),
+            SizedBox(
+              width: double.infinity,
+              child: YoutubePlayer(controller: _yt!),
             )
           else if (_chewie != null)
             SizedBox(width: double.infinity, height: 234, child: Chewie(controller: _chewie!)),

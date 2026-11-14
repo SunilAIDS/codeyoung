@@ -326,10 +326,10 @@ class _PlayerState extends ConsumerState<_Player> {
     try {
       if (lesson.videoType == 'youtube' &&
           (lesson.videoId?.isNotEmpty ?? false)) {
-        _ytController = YoutubePlayerController(
-          initialVideoId: lesson.videoId!,
-          flags: const YoutubePlayerFlags(
-            autoPlay: false,
+        _ytController = YoutubePlayerController.fromVideoId(
+          videoId: lesson.videoId!,
+          autoPlay: false,
+          params: const YoutubePlayerParams(
             mute: false,
             enableCaption: true,
           ),
@@ -399,7 +399,7 @@ class _PlayerState extends ConsumerState<_Player> {
     _mp4Controller?.removeListener(_onProgress);
     _mp4Controller?.dispose();
     _chewieController?.dispose();
-    _ytController?.dispose();
+    _ytController?.close();
     super.dispose();
   }
 
@@ -497,17 +497,9 @@ class _PlayerState extends ConsumerState<_Player> {
       child: Stack(
         children: [
           if (_ytController != null)
-            YoutubePlayerBuilder(
-              player: YoutubePlayer(
-                controller: _ytController!,
-                showVideoProgressIndicator: true,
-                progressIndicatorColor: AppColors.primaryBlue,
-                onReady: () {},
-              ),
-              builder: (context, player) => SizedBox(
-                width: double.infinity,
-                child: player,
-              ),
+            SizedBox(
+              width: double.infinity,
+              child: YoutubePlayer(controller: _ytController!),
             )
           else if (_chewieController != null)
             SizedBox(
