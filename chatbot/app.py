@@ -12,6 +12,8 @@ Flask service that powers the in-app chatbot:
 
 Run:  python app.py            (defaults to 0.0.0.0:5001)
 Env:  PORT, HOST, TTS_ENGINE, TTS_VOICE, SEARCH_ENABLED, SEARCH_DEADLINE
+      TAVILY_API_KEY (optional — enables live web answers; without it the
+      free DuckDuckGo/Wikipedia providers are used instead)
 """
 
 from __future__ import annotations
@@ -44,6 +46,10 @@ TTS_ENGINE = os.environ.get("TTS_ENGINE", "edge")  # edge | gtts | none
 TTS_VOICE = os.environ.get("TTS_VOICE", "en-US-JennyNeural")
 TTS_CACHE_MAX = int(os.environ.get("TTS_CACHE_MAX", "128"))
 SEARCH_ENABLED = os.environ.get("SEARCH_ENABLED", "1") not in ("0", "false", "no")
+# Live web answers via Tavily (search API built for LLM agents). Setting this
+# key makes search reachable from hosts whose network can't reach Wikipedia /
+# DuckDuckGo directly. Basic search costs 1 credit; 1000 free credits/month.
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "").strip()
 UA = {"User-Agent": "Mozilla/5.0 (CodeYoungMentor/1.0)"}
 HTTP_TIMEOUT = float(os.environ.get("HTTP_TIMEOUT", "5"))
 
@@ -744,8 +750,62 @@ def _looks_like_maths(query: str) -> bool:
     return False
 
 
+def _tavily_search(query: str, limit: int = 4) -> tuple[str | None, list[dict]]:
+    """Tavily Search API (https://tavily.com).
+
+    Search APIs built for LLMs and reachable from any host — unlike the free
+    DuckDuckGo instant-answer / Wikipedia endpoints, which time out from some
+    cloud networks. Basic search costs one credit.
+
+    Every result is passed through the kids-safety filter before it can reach
+    the child, exactly like scraped Wikipedia text.
+    """
+    if not TAVILY_API_KEY or _expired():
+        return None, []
+    try:
+        r = requests.post(
+            "https://api.tavily.com/search",
+            json={
+                "api_key": TAVILY_API_KEY,
+                "query": query,
+                "search_depth": "basic",
+                "max_results": 8,
+                "include_answer": False,
+                "include_raw_content": False,
+            },
+            timeout=min(HTTP_TIMEOUT, max(1.0, _remaining() or HTTP_TIMEOUT)),
+        )
+        if r.status_code != 200:
+            return None, []
+        data = r.json()
+    except Exception:
+        return None, []
+
+    results = data.get("results") or []
+    parts: list[str] = []
+    sources: list[dict] = []
+    for hit in results:
+        if not isinstance(hit, dict):
+            continue
+        title = _strip_html(str(hit.get("title") or "")).strip()
+        content = _strip_html(str(hit.get("content") or "")).strip()
+        url = str(hit.get("url") or "").strip()
+        if not content or not _safe(title, content):
+            continue
+        parts.append(content)
+        if url:
+            sources.append({"title": (title or "Source")[:70], "url": url})
+        if len(parts) >= limit:
+            break
+
+    text = " ".join(parts).strip()
+    if not text:
+        return None, []
+    return text, sources[:5]
+
+
 def _search_web(query: str) -> tuple[str | None, list[dict]]:
-    """Try DuckDuckGo first, then Wikipedia.
+    """Try Tavily, then DuckDuckGo, then Wikipedia.
 
     A result is only returned if it actually relates to the question — a
     confidently-wrong answer is worse than admitting we don't know.
@@ -755,6 +815,15 @@ def _search_web(query: str) -> tuple[str | None, list[dict]]:
     if _looks_like_maths(query):
         # Sums are answered locally, not by an encyclopedia lookup.
         return None, []
+
+    # Prefer the search API when a key is configured: it is fast, and it is
+    # the only provider guaranteed reachable from this network. If Tavily
+    # fails (budget exhausted, API down, empty or off-topic results), fall
+    # through to the free providers rather than going silent.
+    if TAVILY_API_KEY:
+        tav_text, tav_sources = _tavily_search(query)
+        if tav_text and len(tav_text) > 60 and _text_relevant(query, tav_text) >= 0.3:
+            return tav_text, tav_sources
 
     text, sources = _duckduckgo_instant(query)
     if text and len(text) > 60 and _text_relevant(query, text) >= 0.5:
