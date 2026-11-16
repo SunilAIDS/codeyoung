@@ -79,7 +79,10 @@ class AccountScreen extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: ErrorState(
                     compact: true,
-                    message: e.toString(),
+                    message: (e is ApiException && e.isOffline)
+                        ? 'The CodeYoung server is still waking up from idle.\n'
+                            'It can take up to a minute — tap Try again in a moment.'
+                        : "We couldn't load your progress. Please tap Try again.",
                     onRetry: () => ref.invalidate(statsProvider),
                   ),
                 ),

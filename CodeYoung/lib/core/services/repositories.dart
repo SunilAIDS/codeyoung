@@ -30,11 +30,24 @@ class AuthController extends StateNotifier<AuthState> {
     await _api.restoreSession();
     if (_api.isAuthenticated) {
       try {
+        // Give a cold server up to a minute before giving up on the saved
+        // session — otherwise first launch after an idle day logs the user
+        // out purely because the backend was asleep.
+        final up = await _api.wake();
+        if (!up) {
+          // Keep the stored token: try again next launch.
+          state = const AuthState(initialised: true);
+          return;
+        }
         final json = await _api.getJson('/api/auth/me', requireAuth: true);
         state = AuthState(user: AppUser.fromJson(json), initialised: true);
         return;
+      } on ApiException catch (e) {
+        // Only a definitive 401 means the session is really over.
+        if (e.isUnauthorized) await _api.clearSession();
       } catch (_) {
-        await _api.clearSession();
+        // Transient failure — keep the token, let the UI show logged-out
+        // state for this run; next launch retries.
       }
     }
     state = const AuthState(initialised: true);

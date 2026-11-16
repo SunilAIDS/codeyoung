@@ -4,10 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/router/app_router.dart';
+import 'core/services/api_service.dart';
 import 'core/theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Ping the hosted API in the background so its free-tier instance is
+  // already awake when the user reaches login/home — never blocks this frame.
+  ApiService.instance.wakeInBackground();
 
   // Brand the system chrome to match the app.
   SystemChrome.setSystemUIOverlayStyle(

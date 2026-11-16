@@ -223,6 +223,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   loading: _loading,
                   onPressed: _submit,
                 ),
+                if (_loading) ...[
+                  const SizedBox(height: 14),
+                  Center(
+                    child: Text(
+                      'Connecting to the CodeYoung server…\nif it has been idle, it can take up to a minute to wake.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.5,
+                        color: isDark
+                            ? AppColors.textOnDark.withValues(alpha: 0.6)
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
 
                 Row(

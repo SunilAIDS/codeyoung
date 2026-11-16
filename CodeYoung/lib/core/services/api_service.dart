@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -127,24 +129,28 @@ class ApiService {
     Map<String, dynamic> body, {
     bool requireAuth = false,
     bool rawToken = false,
-  }) async {
-    try {
-      final res = await _dio.post<Map<String, dynamic>>(path, data: body);
-      if (res.statusCode == 401 && requireAuth) {
-        throw const ApiException('Your session expired. Please sign in again.', 401);
+  }) {
+    // Login/register often race a cold server on first open — wait it out
+    // once rather than fail the user with a network error on their first tap.
+    return _withWarmRetry(() async {
+      try {
+        final res = await _dio.post<Map<String, dynamic>>(path, data: body);
+        if (res.statusCode == 401 && requireAuth) {
+          throw const ApiException('Your session expired. Please sign in again.', 401);
+        }
+        if (res.data == null) return const {};
+        if (res.statusCode != 200 && res.statusCode != 201) {
+          throw ApiException(_messageOf(res.data), res.statusCode ?? 500);
+        }
+        if (rawToken) {
+          final t = res.data!['token'];
+          if (t is String) await _saveToken(t);
+        }
+        return res.data!;
+      } on DioException catch (e) {
+        throw _wrap(e, path);
       }
-      if (res.data == null) return const {};
-      if (res.statusCode != 200 && res.statusCode != 201) {
-        throw ApiException(_messageOf(res.data), res.statusCode ?? 500);
-      }
-      if (rawToken) {
-        final t = res.data!['token'];
-        if (t is String) await _saveToken(t);
-      }
-      return res.data!;
-    } on DioException catch (e) {
-      throw _wrap(e, path);
-    }
+    }, (e) => e.isOffline);
   }
 
   Future<Map<String, dynamic>> putJson(
@@ -219,13 +225,72 @@ class ApiService {
     return 'Something went wrong. Please try again.';
   }
 
+  DateTime? _wokeAt;
+
+  /// Wake the API from free-tier sleep.
+  ///
+  /// The hosted backend parks after ~15 minutes idle and takes up to a minute
+  /// to answer its first request. Ordinary requests use a short timeout so the
+  /// app stays snappy, but login/register on a cold server would then fail
+  /// before the server is ready. This helper pings /health with a long
+  /// deadline and remembers when the server last answered, so the warm-up
+  /// cost is paid once per session rather than on every screen.
+  Future<bool> wake({Duration timeout = const Duration(seconds: 65)}) async {
+    if (_wokeAt != null) return true;
+    try {
+      final wakeDio = Dio(
+        BaseOptions(
+          baseUrl: AppConfig.apiBase,
+          connectTimeout: timeout,
+          receiveTimeout: timeout,
+          headers: {'Content-Type': 'application/json'},
+          responseType: ResponseType.json,
+        ),
+      );
+      final res = await wakeDio.get<Map<String, dynamic>>('/health');
+      if (res.statusCode != 200) return false;
+      _wokeAt = DateTime.now();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Fire-and-forget app-start ping. Never blocks the UI; by the time the
+  /// user taps login, the server is usually already warm.
+  void wakeInBackground() {
+    unawaited(wake());
+  }
+
+  /// Retry a request once after waiting for a cold server.
+  Future<T> _withWarmRetry<T>(
+    Future<T> Function() request,
+    bool Function(ApiException e) retryOn,
+  ) async {
+    try {
+      return await request();
+    } on ApiException catch (e) {
+      if (!retryOn(e)) rethrow;
+      // Cold start: wait for /health, then try once more.
+      final up = await wake();
+      if (!up) {
+        throw const ApiException(
+          'The CodeYoung server is still starting up. Please wait about a '
+          'minute and tap again — your details are safe.',
+          0,
+        );
+      }
+      return request();
+    }
+  }
+
   ApiException _wrap(DioException e, String path) {
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout ||
         e.type == DioExceptionType.connectionError) {
       return ApiException(
-        'Cannot reach the CodeYoung server at ${AppConfig.apiBase}. '
-        'Make sure the backend is running, then tap Retry.',
+        'The CodeYoung server is still waking up — this can take up to a '
+        'minute if it has been idle. Please try again in a moment.',
         0,
         path: path,
       );
